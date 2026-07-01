@@ -2,13 +2,8 @@ import React, { useState, useEffect } from 'react'
 import Login from './components/Login'
 import UserDashboard from './components/UserDashboard'
 import AdminDashboard from './components/AdminDashboard'
+import { supabase } from './supabaseClient'
 import { GraduationCap, LogOut, MessageSquare, ShieldAlert } from 'lucide-react'
-
-// Dynamic API Base calculation to seamlessly work in both Vite dev mode (via proxy)
-// and production XAMPP subfolders (e.g. http://localhost/pkl-stuffs/dist/)
-export const API_BASE = import.meta.env.DEV
-  ? '/api'
-  : (window.location.pathname.includes('/dist') ? '../api' : './api');
 
 function App() {
   const [user, setUser] = useState(() => {
@@ -26,6 +21,35 @@ function App() {
     }
   }, [user]);
 
+  useEffect(() => {
+    // Check initial session
+    const getInitialSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setUser({ email: session.user.email, role: 'admin' });
+      }
+    };
+    getInitialSession();
+
+    // Listen for auth state changes (e.g. sign in/out)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session) {
+        setUser({ email: session.user.email, role: 'admin' });
+      } else {
+        setUser((currentUser) => {
+          if (currentUser?.role === 'admin') {
+            return null;
+          }
+          return currentUser;
+        });
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => {
@@ -33,7 +57,10 @@ function App() {
     }, 4000);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (user?.role === 'admin') {
+      await supabase.auth.signOut();
+    }
     setUser(null);
     showToast('Berhasil keluar dari sistem', 'success');
   };

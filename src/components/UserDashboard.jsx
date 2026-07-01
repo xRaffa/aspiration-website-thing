@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { API_BASE } from '../App'
+import { supabase } from '../supabaseClient'
 import { MessageSquarePlus, History, Send, MessageCircle, RefreshCw } from 'lucide-react'
 
 function UserDashboard({ user, showToast }) {
@@ -15,15 +15,17 @@ function UserDashboard({ user, showToast }) {
   const fetchHistory = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoadingHistory(true)
     try {
-      const response = await fetch(
-        `${API_BASE}/get_aspirasi.php?role=user&name=${encodeURIComponent(user.name)}&jurusan=${encodeURIComponent(user.jurusan)}`
-      )
-      const data = await response.json()
-      if (response.ok && data.status === 'success') {
-        setHistory(data.data)
-      } else {
-        throw new Error(data.message || 'Gagal memuat riwayat')
+      const { data, error } = await supabase
+        .from('aspirations')
+        .select('*')
+        .eq('name', user.name)
+        .eq('jurusan', user.jurusan)
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        throw error
       }
+      setHistory(data || [])
     } catch (err) {
       console.error(err)
       showToast('Gagal memuat riwayat aspirasi', 'error')
@@ -45,26 +47,23 @@ function UserDashboard({ user, showToast }) {
 
     setSubmitting(true)
     try {
-      const response = await fetch(`${API_BASE}/send_aspirasi.php`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: user.name,
-          jurusan: user.jurusan,
-          category,
-          message: message.trim()
-        }),
-      })
+      const { error } = await supabase
+        .from('aspirations')
+        .insert([
+          {
+            name: user.name,
+            jurusan: user.jurusan,
+            category,
+            message: message.trim(),
+            status: 'pending'
+          }
+        ])
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Gagal mengirim aspirasi')
+      if (error) {
+        throw error
       }
 
-      showToast(data.message || 'Aspirasi berhasil terkirim!', 'success')
+      showToast('Aspirasi berhasil terkirim!', 'success')
       setMessage('')
       fetchHistory(true) // Refresh history feed silently
     } catch (err) {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { API_BASE } from '../App'
+import { supabase } from '../supabaseClient'
 import { User, BookOpen, Mail, Lock, LogIn, Sparkles } from 'lucide-react'
 
 function Login({ setUser, showToast }) {
@@ -21,47 +21,58 @@ function Login({ setUser, showToast }) {
     setError('')
     setLoading(true)
 
-    const payload = { role }
     if (role === 'user') {
       if (!name.trim() || !jurusan) {
         setError('Nama dan Jurusan wajib diisi!')
         setLoading(false)
         return
       }
-      payload.name = name.trim()
-      payload.jurusan = jurusan
+      
+      try {
+        // Student login is pure session-based local login
+        showToast('Login berhasil!', 'success')
+        setUser({
+          name: name.trim(),
+          jurusan: jurusan,
+          role: 'user'
+        })
+      } catch (err) {
+        setError(err.message)
+        showToast(err.message, 'error')
+      } finally {
+        setLoading(false)
+      }
     } else {
       if (!email.trim() || !password) {
         setError('Email dan Password wajib diisi!')
         setLoading(false)
         return
       }
-      payload.email = email.trim()
-      payload.password = password
-    }
 
-    try {
-      const response = await fetch(`${API_BASE}/login.php`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      })
+      try {
+        // Authenticate admin securely via Supabase Auth
+        const { data, error: authError } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password: password,
+        })
 
-      const data = await response.json()
+        if (authError) {
+          throw new Error(authError.message === 'Invalid login credentials' 
+            ? 'Email atau password admin salah!' 
+            : authError.message)
+        }
 
-      if (!response.ok) {
-        throw new Error(data.message || 'Login gagal, silakan periksa kembali data Anda')
+        showToast('Login admin berhasil!', 'success')
+        setUser({
+          email: data.user.email,
+          role: 'admin'
+        })
+      } catch (err) {
+        setError(err.message)
+        showToast(err.message, 'error')
+      } finally {
+        setLoading(false)
       }
-
-      showToast(data.message || 'Login berhasil!', 'success')
-      setUser(data.user)
-    } catch (err) {
-      setError(err.message)
-      showToast(err.message, 'error')
-    } finally {
-      setLoading(false)
     }
   }
 

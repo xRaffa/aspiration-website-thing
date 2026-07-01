@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { API_BASE } from '../App'
+import { supabase } from '../supabaseClient'
 import { Inbox, CheckCircle, Clock, Search, MessageSquare, RefreshCw, Send, Edit } from 'lucide-react'
 
 function AdminDashboard({ user, showToast }) {
@@ -18,13 +18,15 @@ function AdminDashboard({ user, showToast }) {
   const fetchAspirations = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true)
     try {
-      const response = await fetch(`${API_BASE}/get_aspirasi.php?role=admin`)
-      const resData = await response.json()
-      if (response.ok && resData.status === 'success') {
-        setData(resData.data)
-      } else {
-        throw new Error(resData.message || 'Gagal memuat data')
+      const { data: resData, error } = await supabase
+        .from('aspirations')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        throw error
       }
+      setData(resData || [])
     } catch (err) {
       console.error(err)
       showToast('Gagal memuat data surat aspirasi', 'error')
@@ -48,21 +50,20 @@ function AdminDashboard({ user, showToast }) {
 
     setSubmittingReply(prev => ({ ...prev, [id]: true }))
     try {
-      const response = await fetch(`${API_BASE}/reply_aspirasi.php`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ id, reply: replyText }),
-      })
+      const { error } = await supabase
+        .from('aspirations')
+        .update({
+          reply: replyText,
+          replied_at: new Date().toISOString(),
+          status: 'replied'
+        })
+        .eq('id', id)
 
-      const resData = await response.json()
-
-      if (!response.ok) {
-        throw new Error(resData.message || 'Gagal mengirim balasan')
+      if (error) {
+        throw error
       }
 
-      showToast(resData.message || 'Balasan berhasil dikirim!', 'success')
+      showToast('Balasan berhasil dikirim!', 'success')
       setReplies(prev => ({ ...prev, [id]: '' }))
       setEditingId(null)
       fetchAspirations(true) // Refresh feed silently
